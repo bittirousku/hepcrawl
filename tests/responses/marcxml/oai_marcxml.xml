@@ -1,0 +1,60 @@
+<marc:record xmlns:marc="http://www.loc.gov/MARC21/slim" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.loc.gov/MARC21/slim http://www.loc.gov/standards/marcxml/schema/MARC21slim.xsd" type="Bibliographic">
+     <marc:leader>00000coc  2200000uu 4500</marc:leader>
+  <marc:controlfield tag="001">123455</marc:controlfield>
+  <marc:controlfield tag="005">20150616005625.0</marc:controlfield>
+  <marc:datafield tag="035" ind1=" " ind2=" ">
+    <marc:subfield code="a">Johnson:1977ue</marc:subfield>
+    <marc:subfield code="9">SPIRESTeX</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="100" ind1=" " ind2=" ">
+    <marc:subfield code="a">Johnson, Edward A.</marc:subfield>
+    <marc:subfield code="u">City Coll., N.Y.</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="690" ind1="C" ind2=" ">
+    <marc:subfield code="a">Thesis</marc:subfield>
+    <marc:subfield code="2">INSPIRE</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="856" ind1="4" ind2=" ">
+    <marc:subfield code="w">p7808687</marc:subfield>
+    <marc:subfield code="y">UMI</marc:subfield>
+    <marc:subfield code="u">http://wwwlib.umi.com/dissertations/fullcit?p7808687</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="909" ind1="C" ind2="O">
+    <marc:subfield code="o">oai:inspirehep.net:123455</marc:subfield>
+    <marc:subfield code="p">INSPIRE:HEP</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="037" ind1=" " ind2=" ">
+    <marc:subfield code="a">UMI-78-08687</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="245" ind1=" " ind2=" ">
+    <marc:subfield code="a">Dual Resonance Models and their Currents</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="300" ind1=" " ind2=" ">
+    <marc:subfield code="a">111</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="500" ind1=" " ind2=" ">
+    <marc:subfield code="a">Ph.D. Thesis</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="695" ind1=" " ind2=" ">
+    <marc:subfield code="a">Thesis</marc:subfield>
+    <marc:subfield code="2">INSPIRE</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="269" ind1=" " ind2=" ">
+    <marc:subfield code="c">1977</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="961" ind1=" " ind2=" ">
+    <marc:subfield code="x">1977</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="961" ind1=" " ind2=" ">
+    <marc:subfield code="c">2007-11-28</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="970" ind1=" " ind2=" ">
+    <marc:subfield code="a">SPIRES-384534</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="980" ind1=" " ind2=" ">
+    <marc:subfield code="a">Thesis</marc:subfield>
+  </marc:datafield>
+  <marc:datafield tag="980" ind1=" " ind2=" ">
+    <marc:subfield code="a">HEP</marc:subfield>
+  </marc:datafield>
+</marc:record>
