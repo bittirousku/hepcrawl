@@ -83,6 +83,63 @@ class JsonWriterPipeline(object):
         self.count += 1
         return item
 
+class XmlWriterPipeline(JsonWriterPipeline):
+    
+    @classmethod
+    def from_crawler(cls, crawler):
+        if crawler.spider is not None:
+            prefix = "{0}_".format(crawler.spider.name)
+        else:
+            prefix = "hepcrawl"
+
+        output_uri = get_temporary_file(
+            prefix=prefix,
+            suffix=".xml",
+            directory=crawler.settings.get("JSON_OUTPUT_DIR")
+        )
+        return cls(
+            output_uri=output_uri,
+        )
+
+    def open_spider(self, spider):
+        self.file = open(self.output_uri, "wb")
+        self.file.write("<collection>\n")
+
+    def close_spider(self, spider):
+        self.file.write("</collection>\n")
+        self.file.close()
+        spider.logger.info("Wrote {0} records to {1}".format(
+            self.count,
+            self.output_uri,
+        ))
+        
+    def process_item(self, item, spider):
+        recid = item.get("recid")[0]
+        path_file = item["files"][0].get("url")
+        description = item["files"][0].get("type")
+        file_type = item["files"][0].get("access")
+        abstract = item.get("abstract")
+
+        line = \
+        '<record>\n'\
+        '  <controlfield tag="001">%s</controlfield>\n'\
+        '  <datafield tag ="FFT" ind1=" " ind2=" ">\n'\
+        '    <subfield code="a">%s</subfield>\n'\
+        '    <subfield code="d">%s</subfield>\n'\
+        '    <subfield code="t">%s</subfield>\n'\
+        '  </datafield>\n' % (recid, path_file, description, file_type)
+        
+        if abstract:
+            line += \
+            '  <datafield tag="520" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(abstract)
+            
+        line += '</record>\n'
+        
+        self.file.write(line)
+        self.count += 1
+        return item
 
 class InspireAPIPushPipeline(object):
     """Push to INSPIRE API via tasks API."""
