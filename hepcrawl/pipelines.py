@@ -84,7 +84,7 @@ class JsonWriterPipeline(object):
         return item
 
 class XmlWriterPipeline(JsonWriterPipeline):
-    
+    """This is my own custom pipeline to write MARCXML files."""
     @classmethod
     def from_crawler(cls, crawler):
         if crawler.spider is not None:
@@ -112,32 +112,49 @@ class XmlWriterPipeline(JsonWriterPipeline):
             self.count,
             self.output_uri,
         ))
-        
+
     def process_item(self, item, spider):
         recid = item.get("recid")[0]
         path_file = item["files"][0].get("url")
         description = item["files"][0].get("type")
         file_type = item["files"][0].get("access")
         abstract = item.get("abstract")
+        issue = item.get("journal_issue")
+        marc_773 = item.get("marc_773")
 
         line = \
         '<record>\n'\
         '  <controlfield tag="001">%s</controlfield>\n'\
-        '  <datafield tag ="FFT" ind1=" " ind2=" ">\n'\
+        '  <datafield tag="FFT" ind1=" " ind2=" ">\n'\
         '    <subfield code="a">%s</subfield>\n'\
         '    <subfield code="d">%s</subfield>\n'\
         '    <subfield code="t">%s</subfield>\n'\
         '  </datafield>\n' % (recid, path_file, description, file_type)
-        
+
         if abstract:
             line += \
             '  <datafield tag="520" ind1=" " ind2=" ">\n'\
             '    <subfield code="a">%s</subfield>\n'\
             '  </datafield>\n' %(abstract)
-            
+
+        if issue:
+            line += \
+            '  <datafield tag="773" ind1=" " ind2=" ">\n'\
+            '    <subfield code="n">%s</subfield>\n'\
+            '  </datafield>\n' %(issue)
+
+        if marc_773:
+            line += \
+            '  <datafield tag="773" ind1=" " ind2=" ">\n'
+            for code in sorted(marc_773[0]):
+                line += \
+                '    <subfield code="%s">%s</subfield>\n' %(code, marc_773[0][code])
+            line +=\
+            '  </datafield>\n'
+
         line += '</record>\n'
-        
-        self.file.write(line)
+
+        self.file.write(line.encode("utf8"))
         self.count += 1
         return item
 

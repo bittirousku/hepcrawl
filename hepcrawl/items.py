@@ -287,3 +287,4 @@ class HEPRecord(scrapy.Item):
     language = scrapy.Field()
 
     recid = scrapy.Field()
+    marc_773 = scrapy.Field()
