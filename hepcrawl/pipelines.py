@@ -115,9 +115,9 @@ class XmlWriterPipeline(JsonWriterPipeline):
 
     def process_item(self, item, spider):
         recid = item.get("recid")[0]
-        path_file = item["files"][0].get("url")
-        description = item["files"][0].get("type")
-        file_type = item["files"][0].get("access")
+        path_file = item["additional_files"][0].get("url")
+        description = item["additional_files"][0].get("type")
+        file_type = item["additional_files"][0].get("access")
         abstract = item.get("abstract")
         issue = item.get("journal_issue")
         marc_773 = item.get("marc_773")
