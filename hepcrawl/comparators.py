@@ -61,6 +61,8 @@ def compare_titles(title, splash_title, method="jaccard", required=0.8):
     orig_splash = splash_title
     #if "Study on the Structure of Hypernuclei" in splash_title:
         #import ipdb; ipdb.set_trace()
+    if isinstance(splash_title, str):
+        splash_title = splash_title.decode("utf8")
     splash_title = format_string(splash_title)
     title = format_string(title)
 
@@ -94,7 +96,11 @@ def format_string(text):
     #if "Double Pomeron Exchange" in text:
         #import ipdb; ipdb.set_trace()
         #text.replace(u"\u03a5", u"$\Upsilon$")
-    text = replace_all(text, uni2latex)
+    try:
+        text = replace_all(text, uni2latex)
+    except UnicodeDecodeError:
+        import ipdb; ipdb.set_trace()
+    #FIXME: remove "In chinese" from titles...
     text = text.lower()
     text = convert_html_subscripts_to_latex(text)
     text = remove_tags(text)

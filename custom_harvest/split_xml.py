@@ -14,15 +14,16 @@ from __future__ import print_function
 from lxml import etree
 
 
+# Load xml records file:
 num_of_records = 50
-
 tree = etree.parse("records.xml")
 root = tree.getroot()
 records = root.xpath("//record")
 
 
+# Why do we have this test function??
 def print_to_file_test(records):
-    """Split big XML to chunks of 50 records and print to files.
+    """Split big XML to chunks of 50 Inspire records and print to files.
     NOTE: Test version with numbers only.
     """
     # This is now actually working!
@@ -61,9 +62,8 @@ def print_to_file_test(records):
 
 def print_to_file(records, prefix):
     """Split big XML to chunks of 50 records and print to files."""
-    # This is now actually working!
     previous_num = 1
-   
+
     for num, record in enumerate(records):
         if num == 0:
             # First 50 records
@@ -82,11 +82,11 @@ def print_to_file(records, prefix):
             if (len(records) - previous_num < num_of_records):
                 # Last less than 50 records, to have a correct filename
                 filename = prefix + "_records_" + str(previous_num) + "-" + str(len(records)) + ".xml"
-            
+
             f = open("tmp/" + filename, "a")
             print("<collection>", file=f)
             print(filename)
-        
+
         # HACK: this will skip the two newlines at the end. Why there are newlines??
         print(etree.tostring(record, pretty_print=True)[:-2], file=f)
 
@@ -96,4 +96,4 @@ def print_to_file(records, prefix):
 
 
 #Finally use the function:
-print_to_file(records, "PRSTAB")
+print_to_file(records, "EPJ")

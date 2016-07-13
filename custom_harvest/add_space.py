@@ -26,5 +26,5 @@ for xml_file in os.listdir("."):
             else:
                 print("No abstract here?")
 
-        with open(outfile, 'w') as f:
-            f.write(etree.tostring(collection, encoding='UTF-8', pretty_print=True))
+        #with open(outfile, 'w') as f:
+            #f.write(etree.tostring(collection, encoding='UTF-8', pretty_print=True))
