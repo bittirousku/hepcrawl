@@ -115,21 +115,28 @@ class XmlWriterPipeline(JsonWriterPipeline):
 
     def process_item(self, item, spider):
         recid = item.get("recid")[0]
-        path_file = item["additional_files"][0].get("url")
-        description = item["additional_files"][0].get("type")
-        file_type = item["additional_files"][0].get("access")
+        if "additional_files" in item:
+            path_file = item.get("additional_files")[0]["url"]
+            description = item.get("additional_files")[0]["type"]
+            file_type = item.get("additional_files")[0]["access"]
         abstract = item.get("abstract")
         issue = item.get("journal_issue")
         marc_773 = item.get("marc_773")
 
         line = \
         '<record>\n'\
-        '  <controlfield tag="001">%s</controlfield>\n'\
-        '  <datafield tag="FFT" ind1=" " ind2=" ">\n'\
-        '    <subfield code="a">%s</subfield>\n'\
-        '    <subfield code="d">%s</subfield>\n'\
-        '    <subfield code="t">%s</subfield>\n'\
-        '  </datafield>\n' % (recid, path_file, description, file_type)
+        '  <controlfield tag="001">%s</controlfield>\n' % (recid)
+
+        try:
+            if "additional_files" in item:
+                line += \
+                '  <datafield tag="FFT" ind1=" " ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '    <subfield code="d">%s</subfield>\n'\
+                '    <subfield code="t">%s</subfield>\n'\
+                '  </datafield>\n' % (path_file, description, file_type)
+        except TypeError:
+            import ipdb; ipdb.set_trace()
 
         if abstract:
             line += \
