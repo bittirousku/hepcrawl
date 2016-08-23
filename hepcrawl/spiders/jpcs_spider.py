@@ -111,9 +111,7 @@ class JPCSSpider(XMLFeedSpider, NLM):
             raise ValueError
             # return None
 
-        # FIXME: Graah! Idiootti, nimesit uudelleen satunnaisia fileitä paikallis-
-        # hakemistossa! Nyt ne eivät enää täsmää AFS:llä olevien kanssa. Noh,
-        # anna vaan erroreiden tulla ja tee uusi inspire-haku lopuksi.
+        # NOTE: please don't rename random files manually...
         full_path = localpath + container_path + pdf_filename
         afs_full_path = afspath + container_path + pdf_filename
 
