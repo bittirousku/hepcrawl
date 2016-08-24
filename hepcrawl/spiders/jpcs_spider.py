@@ -44,7 +44,11 @@ class JPCSSpider(XMLFeedSpider, NLM):
 
         scrapy crawl jpcs -a xml_file=file://`pwd`/custom_harvest/jpcs/inspire_xmls/records1.xml
 
-        scrapy crawl jpcs -a xml_file=file://`pwd`/custom_harvest/jpcs/inspire_xmls/records1.xml -s "JSON_OUTPUT_DIR=tmp/" -s "LOG_FILE=jpcs.log"
+        scrapy crawl jpcs -a xml_file=file://`pwd`/custom_harvest/jpcs/inspire_xmls/records1.xml  -s "LOG_FILE=jpcs.log"
+
+        scrapy crawl jpcs -a xml_file=file://`pwd`/custom_harvest/inspire_xmls/records0_Iu0gZX.xml -s "JSON_OUTPUT_DIR=tmp/"
+        scrapy crawl jpcs -a source_dir=`pwd`/custom_harvest/inspire_xmls/ -s "JSON_OUTPUT_DIR=tmp/"
+
 
     Happy crawling!
     """
@@ -65,12 +69,12 @@ class JPCSSpider(XMLFeedSpider, NLM):
         },
     }
 
-    def __init__(self, zip_file=None, xml_file=None, pdf_files=None, *args, **kwargs):
+    def __init__(self, source_dir=None, xml_file=None, pdf_files=None, *args, **kwargs):
         """Construct JPCS spider."""
         super(JPCSSpider, self).__init__(*args, **kwargs)
-        self.zip_file = zip_file
         self.xml_file = xml_file
         self.pdf_files = pdf_files
+        self.source_dir = source_dir
 
     def start_requests(self):
         """Spider can be run on a record XML file."""
@@ -79,13 +83,21 @@ class JPCSSpider(XMLFeedSpider, NLM):
             # if self.pdf_files:
                 # request.meta["pdf_files"] = self.pdf_files
             yield request
+        elif self.source_dir:
+            for s_file in self.listdir_fullpath(self.source_dir):
+                source_file = "file://" + s_file
+                yield Request(source_file)
 
+    def listdir_fullpath(self, d):
+        return [os.path.join(d, f) for f in os.listdir(d)]
 
     def get_pdf_path(self, issn, vol, issue, fpage, recid, year):
         """Get path for the correct pdf."""
 
-        localpath = "/home/henrikv/.virtualenvs/hepcrawl/src/hepcrawl/tmp/jpcs/"
-        afspath = "/afs/cern.ch/project/inspire/uploads/library/jpcs/"
+        # FIXME: this is working with njp - not jpcs - at the moment, make this a
+        # generic IOP custom crawler!
+        localpath = "/home/henrikv/.virtualenvs/hepcrawl/src/hepcrawl/tmp/njp/"
+        afspath = "/afs/cern.ch/project/inspire/uploads/library/njp/"
 
         # format year for filename use:
         if year and len(year) == 4:
@@ -107,9 +119,10 @@ class JPCSSpider(XMLFeedSpider, NLM):
                 if "pdf" in fname.lower():
                     pdf_filename = fname
         else:
+            #import ipdb; ipdb.set_trace()
             self.logger.warning("No file found for recid " + recid + " (" + container_path + year + ")")
-            raise ValueError
-            # return None
+            #raise ValueError
+            return None
 
         # NOTE: please don't rename random files manually...
         full_path = localpath + container_path + pdf_filename
@@ -149,17 +162,17 @@ class JPCSSpider(XMLFeedSpider, NLM):
         elif doi and len(doi) == 2:
             doi = doi[1]
 
-        if doi == "10.1088/1742-6596/349/1/02008":  # HACK
-            doi = "10.1088/1742-6596/349/1/012008"  # HACK
 
-        proceedings = node.xpath("./datafield[@tag='245']/subfield[@code='a']/text()").extract_first()
-        if "proceedings" in proceedings.lower():
+        title = node.xpath("./datafield[@tag='245']/subfield[@code='a']/text()").extract_first()
+        if "proceedings" in title.lower():
             self.logger.info("Recid " + recid + " is proceedings. Skipping.")
             return None
 
         year = node.xpath("./datafield[@tag='773']/subfield[@code='y']/text()").extract_first()
         if not year:
             pub_date = node.xpath("./datafield[@tag='260']/subfield[@code='c']/text()").extract_first()
+            if not pub_date:
+                pub_date = node.xpath("./datafield[@tag='269']/subfield[@code='c']/text()").extract_first()
             year = pub_date.split("-")[0]
 
         try:
@@ -180,9 +193,12 @@ class JPCSSpider(XMLFeedSpider, NLM):
                 self.logger.warning("No DOI found for recid " + recid + ". Are these proceedings?")
                 return None
 
+
+
         pdf_path = self.get_pdf_path(issn, vol, issue, fpage, recid, year)
         if not pdf_path:
             return None
+
 
         record.add_value("recid", recid)
         file_type = "Fulltext"
