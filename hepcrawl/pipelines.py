@@ -114,7 +114,6 @@ class XmlWriterPipeline(JsonWriterPipeline):
         ))
 
     def process_item(self, item, spider):
-        recid = item.get("recid")[0]
         if "additional_files" in item:
             path_file = item.get("additional_files")[0]["url"]
             description = item.get("additional_files")[0]["type"]
@@ -124,8 +123,10 @@ class XmlWriterPipeline(JsonWriterPipeline):
         marc_773 = item.get("marc_773")
 
         line = \
-        '<record>\n'\
-        '  <controlfield tag="001">%s</controlfield>\n' % (recid)
+        '<record>\n'
+        if "recid" in item:
+            line += \
+            '  <controlfield tag="001">%s</controlfield>\n' % (item["recid"][0])
 
         try:
             if "additional_files" in item:
@@ -161,6 +162,107 @@ class XmlWriterPipeline(JsonWriterPipeline):
 
         line += '</record>\n'
 
+        self.file.write(line.encode("utf8"))
+        self.count += 1
+        return item
+
+
+class XmlInsertPipeline(JsonWriterPipeline):
+    """Ccustom pipeline to write MARCXML files for inserting new records."""
+    @classmethod
+    def from_crawler(cls, crawler):
+        if crawler.spider is not None:
+            prefix = "{0}_".format(crawler.spider.name)
+        else:
+            prefix = "hepcrawl"
+
+        output_uri = get_temporary_file(
+            prefix=prefix,
+            suffix=".xml",
+            directory=crawler.settings.get("JSON_OUTPUT_DIR")
+        )
+        return cls(
+            output_uri=output_uri,
+        )
+
+    def open_spider(self, spider):
+        self.file = open(self.output_uri, "wb")
+        self.file.write("<collection>\n")
+
+    def close_spider(self, spider):
+        self.file.write("</collection>\n")
+        self.file.close()
+        spider.logger.info("Wrote {0} records to {1}".format(
+            self.count,
+            self.output_uri,
+        ))
+
+    def process_item(self, item, spider):
+        language = item.get("language")
+        first_author = item["authors"].pop(0)
+        other_authors = item["authors"]
+        title = item["title"]
+        orig_title = item["orig_title"]
+        date_published = item["date_published"]
+        marc_773 = item["marc_773"]
+
+        line = \
+        '<record>\n'
+        if language:
+            line += \
+            '  <datafield tag="041" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(language[0])
+        if first_author:
+            name = first_author["full_name"]
+            affiliations = first_author["affiliations"]
+            line += \
+            '  <datafield tag="100" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n' % name
+            if affiliations:
+                for aff in affiliations:
+                    line += \
+                    '    <subfield code="v">%s</subfield>\n' % aff["value"]
+            line += \
+            '  </datafield>\n'
+        if other_authors:
+            line += \
+            '  <datafield tag="700" ind1=" " ind2=" ">\n'
+            for oth_author in other_authors:
+                affiliations = oth_author["affiliations"]
+                line += \
+                '    <subfield code="a">%s</subfield>\n' %(oth_author["full_name"])
+                if affiliations:
+                    for aff in affiliations:
+                        line += \
+                        '    <subfield code="v">%s</subfield>\n' % aff["value"]
+            line += \
+            '  </datafield>\n'
+        if title:
+            line += \
+            '  <datafield tag="242" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(title)  # loader TakesFirst
+        if orig_title:
+            line += \
+            '  <datafield tag="245" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(orig_title[0])
+        if date_published:
+            line += \
+            '  <datafield tag="260" ind1=" " ind2=" ">\n'\
+            '    <subfield code="c">%s</subfield>\n'\
+            '  </datafield>\n' %(date_published)
+        if marc_773:
+            line += \
+            '  <datafield tag="773" ind1=" " ind2=" ">\n'
+            for code in sorted(marc_773[0]):
+                line += \
+                '    <subfield code="%s">%s</subfield>\n' %(code, marc_773[0][code])
+            line +=\
+            '  </datafield>\n'
+
+        line += '</record>\n'
         self.file.write(line.encode("utf8"))
         self.count += 1
         return item
