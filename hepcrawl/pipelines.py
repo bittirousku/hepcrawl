@@ -199,15 +199,39 @@ class XmlInsertPipeline(JsonWriterPipeline):
 
     def process_item(self, item, spider):
         language = item.get("language")
-        first_author = item["authors"].pop(0)
-        other_authors = item["authors"]
-        title = item["title"]
-        orig_title = item["orig_title"]
-        date_published = item["date_published"]
-        marc_773 = item["marc_773"]
+        authors = item.get("authors")
+        first_author = ''
+        other_authors = ''
+        if authors:
+            first_author = authors.pop(0)
+            other_authors = authors
+        title_trans = item.get("title_trans")
+        title = item.get("title")
+        date_published = item.get("date_published")
+        marc_773 = item.get("marc_773")
+        free_keywords = item.get("free_keywords")
+        controlled_keywords = item.get("controlled_keywords")
+        report_numbers = item.get("report_numbers")
+        collections = item.get("collections")
+        page_nr = item.get("page_nr")
+        public_notes = item.get("public_notes")
+        abstract = item.get("abstract")
+        content_classification = item.get("content_classification")
+        additional_files = item.get("additional_files")
+        if additional_files:
+            path_file = additional_files[0]["url"]
+            description = additional_files[0]["type"]
+            file_type = additional_files[0]["access"]
 
         line = \
         '<record>\n'
+        if report_numbers:
+            for report_nr in report_numbers:
+                line += \
+                '  <datafield tag="035" ind1=" " ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '    <subfield code="9">%s</subfield>\n'\
+                '  </datafield>\n' %(report_nr["value"], report_nr["source"])
         if language:
             line += \
             '  <datafield tag="041" ind1=" " ind2=" ">\n'\
@@ -215,7 +239,7 @@ class XmlInsertPipeline(JsonWriterPipeline):
             '  </datafield>\n' %(language[0])
         if first_author:
             name = first_author["full_name"]
-            affiliations = first_author["affiliations"]
+            affiliations = first_author.get("affiliations")
             line += \
             '  <datafield tag="100" ind1=" " ind2=" ">\n'\
             '    <subfield code="a">%s</subfield>\n' % name
@@ -225,34 +249,72 @@ class XmlInsertPipeline(JsonWriterPipeline):
                     '    <subfield code="v">%s</subfield>\n' % aff["value"]
             line += \
             '  </datafield>\n'
-        if other_authors:
+        if title_trans:
             line += \
-            '  <datafield tag="700" ind1=" " ind2=" ">\n'
+            '  <datafield tag="242" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(title_trans[0])
+        if title:
+            line += \
+            '  <datafield tag="245" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(title[0])
+        if date_published:
+            line += \
+            '  <datafield tag="260" ind1=" " ind2=" ">\n'\
+            '    <subfield code="c">%s</subfield>\n'\
+            '  </datafield>\n' %(date_published)
+        if page_nr:
+            line += \
+            '  <datafield tag="300" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '  </datafield>\n' %(page_nr[0])
+        if public_notes:
+            for publ_note in public_notes:
+                line += \
+                '  <datafield tag="500" ind1="1" ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '    <subfield code="9">%s</subfield>\n'\
+                '  </datafield>\n' %(publ_note["value"], publ_note["source"])
+        if abstract:
+            line += \
+            '  <datafield tag="520" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '    <subfield code="9">%s</subfield>\n'\
+            '  </datafield>\n' %(abstract[0]["value"], abstract[0]["source"])
+        if content_classification:
+            line += \
+            '  <datafield tag="650" ind1="1" ind2="7">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '    <subfield code="2">%s</subfield>\n'\
+            '  </datafield>\n' %(content_classification[0]["value"], content_classification[0]["scheme"])
+        if free_keywords:
+            for keyw in free_keywords:
+                line += \
+                '  <datafield tag="653" ind1="1" ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '    <subfield code="9">%s</subfield>\n'\
+                '  </datafield>\n' %(keyw["value"], keyw["source"])
+        if controlled_keywords:
+            for keyw in controlled_keywords:
+                line += \
+                '  <datafield tag="695" ind1=" " ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '    <subfield code="2">%s</subfield>\n'\
+                '  </datafield>\n' %(keyw["value"], keyw["scheme"])
+        if other_authors:
             for oth_author in other_authors:
-                affiliations = oth_author["affiliations"]
+                line += \
+                '  <datafield tag="700" ind1=" " ind2=" ">\n'
+                affiliations = oth_author.get("affiliations")
                 line += \
                 '    <subfield code="a">%s</subfield>\n' %(oth_author["full_name"])
                 if affiliations:
                     for aff in affiliations:
                         line += \
                         '    <subfield code="v">%s</subfield>\n' % aff["value"]
-            line += \
-            '  </datafield>\n'
-        if title:
-            line += \
-            '  <datafield tag="242" ind1=" " ind2=" ">\n'\
-            '    <subfield code="a">%s</subfield>\n'\
-            '  </datafield>\n' %(title)  # loader TakesFirst
-        if orig_title:
-            line += \
-            '  <datafield tag="245" ind1=" " ind2=" ">\n'\
-            '    <subfield code="a">%s</subfield>\n'\
-            '  </datafield>\n' %(orig_title[0])
-        if date_published:
-            line += \
-            '  <datafield tag="260" ind1=" " ind2=" ">\n'\
-            '    <subfield code="c">%s</subfield>\n'\
-            '  </datafield>\n' %(date_published)
+                line += \
+                '  </datafield>\n'
         if marc_773:
             line += \
             '  <datafield tag="773" ind1=" " ind2=" ">\n'
@@ -261,6 +323,19 @@ class XmlInsertPipeline(JsonWriterPipeline):
                 '    <subfield code="%s">%s</subfield>\n' %(code, marc_773[0][code])
             line +=\
             '  </datafield>\n'
+        if additional_files:
+            line += \
+            '  <datafield tag="FFT" ind1=" " ind2=" ">\n'\
+            '    <subfield code="a">%s</subfield>\n'\
+            '    <subfield code="d">%s</subfield>\n'\
+            '    <subfield code="t">%s</subfield>\n'\
+            '  </datafield>\n' % (path_file, description, file_type)
+        if collections:
+            for collection in collections:
+                line += \
+                '  <datafield tag="980" ind1=" " ind2=" ">\n'\
+                '    <subfield code="a">%s</subfield>\n'\
+                '  </datafield>\n' %(collection["primary"])
 
         line += '</record>\n'
         self.file.write(line.encode("utf8"))

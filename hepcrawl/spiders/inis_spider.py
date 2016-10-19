@@ -13,6 +13,7 @@ from __future__ import absolute_import, print_function
 
 import re
 
+import dateutil
 from urlparse import urljoin
 
 from scrapy import Request
@@ -22,23 +23,50 @@ from ..items import HEPRecord
 from ..loaders import HEPLoader
 from ..utils import has_numbers
 
+# We have a pdf file for these report numbers:
+pdf_numbers = {
+    19105948, 19105949, 19105950, 19105951, 19105952, 19105953, 19105954,
+    19105955, 19105956, 19105957, 19105958, 19105959, 19105960, 19105961,
+    19105962, 19105963, 19105964, 19105965, 19105966, 19105967, 19105991,
+    19105992, 19105993, 19105994, 19105995, 19105996, 19105997, 19105998,
+    19105999, 19106000, 19106001, 19106002, 19106003, 19106004, 19106005,
+    19106006, 19106007, 19106008, 19106009, 19106028, 19106053, 19106054,
+    19106055, 19106056, 19106057, 19106058, 19106064, 19106065, 19106066,
+    19106067, 19106068, 19106069, 19106070, 19106071, 19106072, 19106073,
+    19106074, 19106075, 19106076, 19106077, 19106078, 19106079, 19106080,
+    19106081, 19106082, 19106083, 19106084, 19106085, 19106086, 19106087,
+    19106088, 19106089, 19106090, 19106091, 19106092, 19106093, 19106094,
+    19106095, 19106096, 19106132, 19106133, 19106134, 19106135, 19106136,
+    19106137, 19106138, 19106139, 19106140, 19106141, 19106142, 19106143,
+    19106144, 19106145, 19106146, 19106167, 19106168, 19106169, 19106170,
+    19106171, 19106172, 19106173, 19106174, 19106175, 19106176, 19106177,
+    19106178, 20012342
+}
+
+proceedings_fulltext_attached_on_inis = {
+    11506523,
+    11570979,
+    12582846,
+    17065215,
+    17085748,
+    19102901,
+    19100851,
+}
 
 class INISSpider(CrawlSpider):
-#class INISSpider(XMLFeedSpider):
 
     """INIS crawler
-    Scrapes theses metadata from INIS experiment web page.
+    Scrapes theses metadata from INIS Excel file.
     https://inis.iaea.org/search/search.aspx?q=source%3A%226.+All-union+conference+on+charged+particle+accelerators%3B+Dubna%2C+USSR%3B+11+-+13+Oct+1978%22&src=inws
 
     example usage:
-    scrapy crawl INIS -a source_file=file://`pwd`/tests/responses/inis/records_1.htm -s "JSON_OUTPUT_DIR=tmp/"
+    scrapy crawl INIS_excel -a source_file=file://`pwd`/tests/responses/inis/test.csv -s "JSON_OUTPUT_DIR=tmp/"
+    scrapy crawl INIS_excel -a source_file=file://`pwd`/tests/responses/inis/dubna_proceedings.csv -s "JSON_OUTPUT_DIR=tmp/"
 
     Happy crawling!
     """
 
-    name = 'INIS'
-    start_urls = ["https://inis.iaea.org/search/search.aspx?q=source%3A%226.+All-union+conference+on+charged+particle+accelerators%3B+Dubna%2C+USSR%3B+11+-+13+Oct+1978%22&src=inws"]
-    itertag = '//div[@id="main"]//div[@class="rightNav"]/div[@class="g1"]'
+    name = 'INIS_excel'
 
     custom_settings = {
         'ITEM_PIPELINES': {
@@ -54,101 +82,215 @@ class INISSpider(CrawlSpider):
     def start_requests(self):
         """You can also run the spider on local test files"""
         if self.source_file:
-            yield Request(self.source_file)
-        elif self.start_urls:
-            i = 0
-            while i < 242:
-                url = self.start_urls[0] + "&start" + i
-                i += 10
-                yield Request(url)
+           yield Request(self.source_file)
 
+    def parse_csv_string(self, response):
+        """Convert the CVS file to JSON."""
+        # FIXME: other option is to use csv module
+        # Actually the best thing would be not to use HEPcrawl to do this..?
 
-    def fix_affiliation_line(self, affiliations):
-        """Remove possible brackets from beginning and end.
+        lines = response.body.strip("\n").split("\n")
 
-        Note that strip("()") removes all brackets from end, which is not
-        desirable: we might have something like "(Moskva (USSR))"
-        """
-        fixed_affs = []
-        for aff in affiliations:
-            aff = aff.strip()
-            if aff[0] == "(" and aff[-1] == ")":
-                fixed_affs.append(aff[1:-1])
+        header = lines.pop(0).replace("\"", "")  # I converted the XLSX with stupid quotes on strings....
+        header_keys = header.split("\t")
+        list_of_dicts = []
 
-        return fixed_affs
+        for line in lines:
+            metadata_dict = {}
+            line = line.replace("\"", "")
+            record = line.split("\t")
+            assert len(header_keys) == len(record)
+            for index, key in enumerate(header_keys):
+                metadata_dict[key] = record[index] if record[index] != "NULL" else ''
+            list_of_dicts.append(metadata_dict)
 
+        return list_of_dicts
 
-    def get_authors(self, record):
+    def get_authors(self, jsonrecord):
         """Get authors."""
         authors = []
-        authors_raw = record.xpath('.//span[@class="aut-cc author"]/a[@class="author-name"]')
-        for author in authors_raw:
-            author_name = author.xpath('./text()').extract_first()
-            # FIXME: affiliations could be wrong!
-            # Now we are just outputting all the affs without concern to which is which
-            affiliations = author.xpath('./@data-affiliation').extract()
-            affiliations = self.fix_affiliation_line(affiliations)
+        authors_raw = jsonrecord["Authors"]
+        # First should remove the affiliations, otherwise the regex won't
+        # behave nicely.
+        authors_raw = re.sub("\(.*?\)", "", authors_raw).rstrip(".").rstrip()
+        authorlist = re.findall(r'(\w+\'*, \w*\.\w*\.*)', authors_raw)
+        # import ipdb; ipdb.set_trace()
+
+        for author in authorlist:
             authors.append({
-                "raw_name": author_name,
-                "affiliations": [{'value': aff} for aff in affiliations],
+                "raw_name": author,
             })
 
+        if not authors:
+            # This should not happen
+            import ipdb; ipdb.set_trace()
         return authors
 
-    def clean_text(self, text):
-        """Remove unwanted whitespaces and newlines from a string."""
-        return " ".join(text.split())
+    def get_page_nrs(self, jsonrecord):
+        """Get the page range and page numbers."""
+        pages_raw = jsonrecord["Pages"]
+
+        if "-" in pages_raw:
+            fpage, lpage = re.search(r'(\d+)-(\d+)', pages_raw).groups()
+            page_range = '{}-{}'.format(fpage, lpage)
+            page_nr = str(int(lpage) - int(fpage) + 1)
+        else:
+            page_range = re.search(r'(\d+)', pages_raw).group(0)
+            page_nr = ''
+
+
+        return page_range, page_nr
+
+    def get_cnum(self, jsonrecord):
+        """Get CNUM."""
+        date = jsonrecord["Cond Date"]
+
+        try:
+            fday, lday, month, year = re.search(r'^(\d+)\s*-\s*(\d+)\s(\w+)\s(\d+).$', date).groups()
+        except AttributeError:
+            # Don't want this to happen
+            import ipdb; ipdb.set_trace()
+
+
+        month = dateutil.parser.parse(month).month
+
+        # FIXME: be careful, the cnum might be different if there are
+        # multiple conferences on the same day!
+        cnum = 'C{}-{}-{}'.format(year[-2:], month, fday)
+
+        return cnum
+
+    def create_reportnr_dicts(self, jsonrecord):
+        """Create structured dictionaries to add to 'report_numbers' item."""
+        report_no = jsonrecord["RN"]
+        if report_no:
+            return {
+                    'value': report_no,
+                    'source': "INIS",
+                }
+
+    def create_public_notes_dicts(self, jsonrecord):
+        """Create structured dictionaries to add to 'report_numbers' item."""
+        public_note = jsonrecord["Physical Description"]
+        if public_note:
+            return {
+                    'value': public_note.strip(),
+                    'source': "INIS",
+                }
+
+    def get_classification_dicts(self, term, scheme):
+        """Get content classification."""
+        return {
+                'value': term,
+                'scheme': scheme,
+            }
+
+    def get_controlled_keywords(self, jsonrecord):
+        keywords_raw = jsonrecord["Descriptors"].lower().rstrip(".")
+        kwlist =  [keyw.capitalize() for keyw in keywords_raw.split("; ")]
+        keywords = []
+
+        for keyw in kwlist:
+            keywords.append(
+                {
+                'value': keyw,
+                'scheme': 'INIS',
+                }
+            )
+
+        return keywords
+
+
+    def create_fft_dicts(self, file_path):
+        """Create a structured dictionary and add to 'files' item."""
+        file_dict = {
+            "access": "INSPIRE-PUBLIC",
+            "description": "INIS",
+            "url": file_path,
+            "type": "Fulltext",
+        }
+
+        return file_dict
+
+
 
 
     def parse(self, response):
-        """Parse Alpha web page into a HEP record."""
+        """Parse INIS CSV string into a HEP record."""
+        json_responses = self.parse_csv_string(response)
 
-        node = response.selector
-        publications = node.xpath(self.itertag)
+        for jsonrecord in json_responses:
+            #import ipdb; ipdb.set_trace()
+            language = "Russian"
+            report_no = self.create_reportnr_dicts(jsonrecord)
+            title = jsonrecord["Original Title"]
+            title_translated = jsonrecord["Title"]
+            authors = self.get_authors(jsonrecord)
+            page_range, page_nr = self.get_page_nrs(jsonrecord)
+            date_published = jsonrecord["Publ Year"]
+            abstract = jsonrecord["Abstract"]
+            description = jsonrecord["Physical Description"]
+            collections = ["HEP", "ConferencePaper"]
+            controlled_keywords = self.get_controlled_keywords(jsonrecord)
+            cnum = self.get_cnum(jsonrecord)
+            content_classification = self.get_classification_dicts(
+                "Accelerators", "INSPIRE"
+            )
+            reportno = jsonrecord["RN"]
 
-        for pub in publications:
-            record = HEPLoader(item=HEPRecord(), selector=node, response=response)
-            en_title = pub.xpath('.//div[@class="g1-title"]//span[@class="englishtitle"]/text()').extract_first()
-            authors = self.get_authors(pub)  # Remember: first one marc 100, rest marc 700
-            conference_title = "All-union conference on charged particle accelerators; Dubna, USSR; 11 - 13 Oct 1978"
+            record = HEPLoader(item=HEPRecord(), selector=jsonrecord, response=response)
 
-            more_info = pub.xpath('./div[@class="expandable"]')
-            original_title = more_info.xpath('.//span[@class="cc originaltitle"]/text()').extract_first()
-            keywords = more_info.xpath('.//span[@class="cc primarysubject"]//text()').extract()
-            doctype = more_info.xpath('.//span[@class="cc recordtype"]//text()').extract_first()
-            report_no = more_info.xpath('.//span[@class="cc reportnumber"]//text()').extract_first()
-            language = more_info.xpath('.//span[@class="cc language"]//text()').extract_first()
-            year = more_info.xpath('.//span[@class="cc year"]//text()').extract_first()
-            collections = ['HEP', 'ConferencePaper']
-            # license?
-
-            # FIXME: try to extract something from the pubnote:
-            raw_pubnote = more_info.xpath('.//span[@class="cc source"]/text()').extract_first()
-
-            record.add_value("title", self.clean_text(en_title))
-            record.add_value("orig_title", self.clean_text(original_title))
-            record.add_value("authors", authors)
-            record.add_value("free_keywords", keywords)
-
-            record.add_value("journal_doctype", doctype)  # FIXME: this is a report, so no journal_?
-            record.add_value("journal_year", year)  # FIXME: same
-            record.add_value("date_published", year)
-
-            record.add_value("report_numbers", report_no)
-            if "english" not in language.lower():
+            # NOTE: Watch out for incorrect titles. If the original
+            # is in English, the "Original Title" will be the title of the whole
+            # proceedings in Russian (Trudy). Also note that the language of all the
+            # records will be either "Russian" or "NULL". In these cases
+            # there should be no translated title and the title should be "Title"
+            # No language field should be present.
+            if jsonrecord["Language"] == "":
+            # if "Trudy devyatogo" in  jsonrecord["Original Title"]:
+                record.add_value("title", jsonrecord["Title"].rstrip("."))
+            else:
+                record.add_value("title", jsonrecord["Original Title"].rstrip("."))
+                record.add_value("title_trans", jsonrecord["Title"].rstrip("."))
                 record.add_value("language", language)
 
+            if abstract:
+                record.add_value("abstract", jsonrecord["Abstract"])
+            record.add_value("authors", self.get_authors(jsonrecord))
+            record.add_value("controlled_keywords", self.get_controlled_keywords(jsonrecord))
+            record.add_value("public_notes", self.create_public_notes_dicts(jsonrecord))
+            record.add_value("content_classification", content_classification)
+            record.add_value("date_published", jsonrecord["Publ Year"])
+            if page_nr:
+                record.add_value("page_nr", page_nr)
             record.add_value("collections", collections)
+            record.add_value("report_numbers", self.create_reportnr_dicts(jsonrecord))
 
-            cnum = "C78-10-11"  # NOTE: CNUM is hardcoded here!
+
             marc_773 = {
-                # "c": fpage,  # these are in raw_pubnote but they are wrong!
+                "c": page_range,
                 "w": cnum,
-                # "x":,
-                "y": year,
             }
-
             record.add_value("marc_773", marc_773)
+
+            if int(reportno) in pdf_numbers:
+                afs_path = "/afs/cern.ch/project/inspire/uploads/library/dubna/" + reportno + ".pdf"
+                record.add_value("additional_files", self.create_fft_dicts(afs_path))
+
+
+            # Theses fields we want:
+            ## 100/700 for the authors
+            ## 041__a:Russian
+            ## 245__a:Russian title
+            ## 242__a:translated title
+            ## 035__a:<RN> with $$9:INIS
+            ## 773__c:Pages $$w<CNUM>
+            ## 260__c:Publ Year
+            ## 500__a:Physical description 9:INIS
+            ## 520__a:abstract 9:INIS
+            ## 980__a:HEP + ConferencePaper
+            ## 65017a:Accelerators 2:INSPIRE
+            ## 6531a: keywords 9: publisher
 
 
 

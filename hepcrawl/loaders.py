@@ -84,6 +84,7 @@ class HEPLoader(ItemLoader):
     )
 
     abstract_out = TakeFirst()
+    abstract_out = FreeKeywords(source="INIS")
 
     collaborations_in = MapCompose(
         clean_collaborations
@@ -93,6 +94,15 @@ class HEPLoader(ItemLoader):
     collections_out = ListToValueDict(key="primary")
 
     title_in = MapCompose(
+        clean_whitespace_characters,
+        convert_html_subscripts_to_latex,
+        fix_title_capitalization,
+        remove_attributes_from_tags,
+        selective_remove_tags(keep=MATHML_ELEMENTS),
+        unicode.strip,
+    )
+
+    title_trans_in = MapCompose(
         clean_whitespace_characters,
         convert_html_subscripts_to_latex,
         fix_title_capitalization,
@@ -111,7 +121,7 @@ class HEPLoader(ItemLoader):
     )
 
     subtitle_out = TakeFirst()
-    title_out = Join()
+    #title_out = Join()
 
     journal_title_out = TakeFirst()
     journal_year_out = TakeFirst()

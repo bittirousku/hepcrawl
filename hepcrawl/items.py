@@ -115,6 +115,7 @@ class HEPRecord(scrapy.Item):
             }, ...
         ]
     """
+
     classification_numbers = scrapy.Field()  # Like PACS numbers
     """Classification numbers like PACS numbers.
 
@@ -291,3 +292,8 @@ class HEPRecord(scrapy.Item):
 
     recid = scrapy.Field()
     marc_773 = scrapy.Field()
+    title_trans = scrapy.Field()
+    # This is basically the same as classification_number, but cleaner. You
+    # should actually clean the original item.
+    content_classification = scrapy.Field()
+    controlled_keywords = scrapy.Field()
