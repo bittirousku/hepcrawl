@@ -11,9 +11,13 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 import os
 
+import shutil
 import six
 
+import pkg_resources
 import pytest
+
+from scrapy.http import HtmlResponse, Request
 
 from hepcrawl.spiders import iop_spider
 
@@ -23,20 +27,88 @@ from .responses import (
     get_node,
 )
 
-tests_dir = os.path.dirname(os.path.realpath(__file__))
-test_pdf_dir = os.path.join(tests_dir, "responses/iop/pdf/")
+TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+TEST_TMP_DIR = os.path.join(TEST_DIR, "responses/iop/test_tmp/")
+# Remove the test output directory if it exists:
+if os.path.exists(TEST_TMP_DIR):
+    shutil.rmtree(TEST_TMP_DIR)
+os.makedirs(TEST_TMP_DIR)
 
 
 @pytest.fixture
-def record():
-    """Return results generator from the WSP spider."""
+def scrape_iop_test_metadata():
+    """Splash page path for JATS file."""
+    return pkg_resources.resource_string(
+        __name__,
+        os.path.join(
+            'responses',
+            'iop',
+            'xml',
+            'test_standard.xml'
+        )
+    )
+
+
+@pytest.fixture
+def record(scrape_iop_test_metadata):
+    """Mock the STACKS scraping and build the final record.
+
+    Here we are specifying the ISSN and issue.
+    """
+    stacks_url = os.path.join(TEST_DIR, "responses/iop/stacks_pages/retrieve_xml.html")
+    stacks_pdf_url = os.path.join(TEST_DIR, "responses/iop/stacks_pages/local_loading_pdf.html")
+
     spider = iop_spider.IOPSpider()
-    response = fake_response_from_file('iop/xml/test_standard.xml')
+    response = fake_response_from_file('iop/stacks_pages/retrieve_xml.html')
+    spider.http_netrc = "tests/responses/iop/test_netrc"
+    spider.stacks_url = "file://" + stacks_url
+    spider.stacks_pdf_url = "file://" + stacks_pdf_url
+    spider.local_store = "tests/responses/iop/test_tmp"
+    spider.journal_issn = "1943-7722"
+    spider.issue = "143/3"
+    spider.ISSNS = ["1943-7722"]
+    # Fake the ISSNS list because we don't have rights for the journal the
+    # test metadata is from (it's from the public IOP web site). We should
+    # probably not use our metadata for testing, as IOP is quite sensitive on
+    # these things.
+
+    request = spider.scrape_for_available_issues(response).next()
+    response = HtmlResponse(
+        url=request.url,
+        request=request,
+        body=scrape_iop_test_metadata
+    )
+
     node = get_node(spider, "Article", response)
-    spider.pdf_files = test_pdf_dir
-    parsed_record = spider.parse_node(response, node)
-    assert parsed_record
-    return parsed_record
+    record = spider.parse_node(response, node)
+
+    return record
+
+
+def test_stuff(scrape_iop_test_metadata):
+    """Mock the STACKS scraping.
+
+    Here we try taking all the available issues (two issues).
+    """
+    stacks_url = os.path.join(TEST_DIR, "responses/iop/stacks_pages/retrieve_xml_less.html")
+    stacks_pdf_url = os.path.join(TEST_DIR, "responses/iop/stacks_pages/local_loading_pdf.html")
+
+    spider = iop_spider.IOPSpider()
+    response = fake_response_from_file('iop/stacks_pages/retrieve_xml_less.html')
+    spider.http_netrc = "tests/responses/iop/test_netrc"
+    spider.stacks_url = "file://" + stacks_url
+    spider.stacks_pdf_url = "file://" + stacks_pdf_url
+    spider.local_store = "tests/responses/iop/test_tmp"
+
+    requests = list(spider.scrape_for_available_issues(response))
+
+    assert len(requests) == 2
+    assert requests[0].meta["issn"] == '1674-4527'
+    assert requests[1].meta["issn"] == '1674-4527'
+    assert requests[0].meta["volume"] == '16'
+    assert requests[1].meta["volume"] == '16'
+    assert requests[0].meta["issue"] == '10'
+    assert requests[1].meta["issue"] == '11'
 
 
 def test_abstract(record):
@@ -47,7 +119,11 @@ def test_abstract(record):
 
 def test_title(record):
     """Test extracting title."""
-    title = 'A Modified Lynch Syndrome Screening Algorithm in Colon Cancer: BRAF Immunohistochemistry Is Efficacious and Cost Beneficial.'
+    title = (
+        'A Modified Lynch Syndrome Screening Algorithm in Colon Cancer: BRAF '
+        'Immunohistochemistry Is Efficacious and Cost Beneficial.'
+    )
+
     assert "title" in record
     assert record["title"] == title
 
@@ -86,6 +162,7 @@ def test_dois(record):
 def test_collections(record):
     """Test extracting collections."""
     collections = ['HEP', 'Citeable', 'Published']
+
     assert record["collections"]
     for collection in record["collections"]:
         assert collection["primary"] in collections
@@ -98,6 +175,7 @@ def test_publication_info(record):
     journal_volume = "143"
     journal_issue = "3"
     journal_issn = "1943-7722"
+
     assert "journal_title" in record
     assert record["journal_title"] == journal_title
     assert "journal_year" in record
@@ -137,6 +215,7 @@ def test_copyrights(record):
     """Test extracting copyright."""
     copyright_holder = "American Society for Clinical Pathology"
     copyright_statement = "Copyright\xa9 by the American Society for \n  Clinical Pathology"
+
     assert "copyright_holder" in record
     assert record["copyright_holder"] == copyright_holder
     assert "copyright_statement" in record
@@ -145,17 +224,18 @@ def test_copyrights(record):
 
 def test_files(record):
     """Test files dictionary."""
-    pdf_filename = "test_143_3_336.pdf"
+    test_issue_path = "1943-7722/143/3/336/test_143_3_336.pdf"
 
+    #pytest.set_trace()
     assert "additional_files" in record
-    assert record["additional_files"][1]["access"] == 'INSPIRE-HIDDEN'
-    assert record["additional_files"][1]["type"] == 'Fulltext'
-    assert record["additional_files"][1]["url"] == test_pdf_dir + pdf_filename
+    assert record["additional_files"][0]["access"] == 'INSPIRE-HIDDEN'
+    assert record["additional_files"][0]["type"] == 'Fulltext'
+    assert record["additional_files"][0]["url"] == TEST_TMP_DIR + test_issue_path
 
 
 @pytest.fixture
 def erratum_open_access_record():
-    """Return results generator from the WSP spider."""
+    """Erratum record."""
     spider = iop_spider.IOPSpider()
     body = """
     <ArticleSet>
@@ -163,6 +243,7 @@ def erratum_open_access_record():
             <Journal>
                 <PublisherName>Institute of Physics</PublisherName>
                 <JournalTitle>J. Phys.: Conf. Ser.</JournalTitle>
+                <Issn>1742-6596</Issn>
                 <Volume>143</Volume>
                 <Issue>3</Issue>
             </Journal>
@@ -173,9 +254,10 @@ def erratum_open_access_record():
     """
     response = fake_response_from_string(body)
     node = get_node(spider, "Article", response)
-    tests_dir = os.path.dirname(os.path.realpath(__file__))
-    spider.pdf_files = os.path.join(tests_dir, "responses/iop/pdf/")
+    spider.pdf_files = os.path.join(TEST_DIR, "responses/iop/pdf")
     parsed_record = spider.parse_node(response, node)
+
+
     assert parsed_record
     return parsed_record
 
@@ -183,14 +265,15 @@ def erratum_open_access_record():
 
 def test_files_erratum_open_access_record(erratum_open_access_record):
     """Test files dict with open access journal with erratum article."""
-    pdf_filename = "test_143_3_336.pdf"
+    test_issue_path = "responses/iop/pdf/1742-6596/143/3/336/test_143_3_336.pdf"
+
     assert "additional_files" in erratum_open_access_record
     assert erratum_open_access_record["additional_files"][
-        1]["access"] == 'INSPIRE-PUBLIC'
+        0]["access"] == 'INSPIRE-PUBLIC'
     assert erratum_open_access_record[
-        "additional_files"][1]["type"] == 'Erratum'
+        "additional_files"][0]["type"] == 'Erratum'
     assert erratum_open_access_record["additional_files"][
-        1]["url"] == test_pdf_dir + pdf_filename
+        0]["url"] == os.path.join(TEST_DIR, test_issue_path)
 
 
 def test_not_published_record():
@@ -210,9 +293,10 @@ def test_not_published_record():
     """
     response = fake_response_from_string(body)
     node = get_node(spider, "Article", response)
-    tests_dir = os.path.dirname(os.path.realpath(__file__))
-    spider.pdf_files = os.path.join(tests_dir, "responses/iop/pdf/")
+    TEST_DIR = os.path.dirname(os.path.realpath(__file__))
+    spider.pdf_files = os.path.join(TEST_DIR, "responses/iop/test_tmp/")
     records = spider.parse_node(response, node)
+
     assert records is None
 
 
@@ -232,14 +316,68 @@ def test_tarfile(tarfile, tmpdir):
     """Test untarring a tar.gz package with a test PDF file."""
     spider = iop_spider.IOPSpider()
     pdf_files = spider.untar_files(tarfile, six.text_type(tmpdir))
+
     assert len(pdf_files) == 1
     assert "test_143_3_336.pdf" in pdf_files[0]
 
 
-def test_handle_package(tarfile):
+def test_handle_pdf_package(tarfile):
     """Test getting the target folder name for pdf files."""
     spider = iop_spider.IOPSpider()
     tarfile = "file://" + tarfile
-    target_folder = spider.handle_package(tarfile)
+    target_folder = spider.handle_pdf_package(tarfile)
 
     assert target_folder
+
+
+def test_get_authentication():
+    spider = iop_spider.IOPSpider()
+    spider.stacks_url = "stacks_url"
+    spider.http_netrc = "tests/responses/iop/test_netrc"
+    user, passw = spider.get_authentications()
+
+    assert user == "user"
+    assert passw == "passw"
+
+def test_get_authentication_no_netrc():
+    spider = iop_spider.IOPSpider()
+    spider.stacks_url = "stacks_url"
+    spider.http_netrc = "here/are/no/credentials"
+    user, passw = spider.get_authentications()
+
+    assert user == ""
+    assert passw == ""
+
+
+def test_getting_invalid_journal():
+    """Mock the STACKS scraping with invalid ISSN."""
+    spider = iop_spider.IOPSpider()
+    response = fake_response_from_file('iop/stacks_pages/retrieve_xml.html')
+    spider.local_store = "tests/responses/iop/test_tmp"
+    spider.journal_issn = "4532-1195"
+    spider.issue = "143/3"
+
+    with pytest.raises(ValueError):
+        spider.scrape_for_available_issues(response).next()
+
+def test_getting_nonavailable_journal():
+    """Mock the STACKS scraping with valid but non-available ISSN."""
+    spider = iop_spider.IOPSpider()
+    response = fake_response_from_file('iop/stacks_pages/retrieve_xml.html')
+    spider.journal_issn = "4532-1195"
+    spider.issue = "111/1"
+    spider.ISSNS = ["4532-1195"]  # fake the valid issns list
+
+    with pytest.raises(KeyError):
+        spider.scrape_for_available_issues(response).next()
+
+def test_getting_nonavailable_issue():
+    """Mock the STACKS scraping with valid but non-available issue."""
+    spider = iop_spider.IOPSpider()
+    response = fake_response_from_file('iop/stacks_pages/retrieve_xml.html')
+    spider.journal_issn = "1943-7722"
+    spider.issue = "111/1"
+    spider.ISSNS = ["1943-7722"]  # fake the valid issns list
+
+    with pytest.raises(ValueError):
+        spider.scrape_for_available_issues(response).next()
